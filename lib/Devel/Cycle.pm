@@ -1,5 +1,5 @@
 package Devel::Cycle;
-# $Id: Cycle.pm,v 1.4 2004/01/12 03:04:00 lstein Exp $
+# $Id: Cycle.pm,v 1.6 2005/01/21 18:49:04 lstein Exp $
 
 use 5.006001;
 use strict;
@@ -16,7 +16,7 @@ require Exporter;
 our @ISA = qw(Exporter);
 our @EXPORT = qw(find_cycle);
 our @EXPORT_OK = qw($FORMATTING);
-our $VERSION = '1.02';
+our $VERSION = '1.03';
 our $FORMATTING = 'roasted';
 
 sub find_cycle {
@@ -69,7 +69,7 @@ sub _find_cycle {
     }
   }
   elsif ($type eq 'HASH') {
-    for my $key (keys %$current) {
+    for my $key (sort keys %$current) {
        next if isweak($current->{$key});
       _find_cycle($current->{$key},{%$seenit},$callback,
 		  (@report,['HASH',$key,$current => $current->{$key}]));

@@ -1,5 +1,9 @@
 Revision history for Perl extension Devel::Cycle.
 
+1.03 Fri Jan 21 13:47:50 EST 2005
+	- Sort the hash keys so that the cycle path is more deterministic
+	(avoids test failures in Test::Memory::Cycle)
+
 1.02 Mon Jan 12 09:04:58 EST 2004
 	- Formats anonymous memory references by default as \%A, \@B, etc,
 	rather than using hex form.
