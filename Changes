@@ -1,5 +1,10 @@
 Revision history for Perl extension Devel::Cycle.
 
+1.02 Mon Jan 12 09:04:58 EST 2004
+	- Formats anonymous memory references by default as \%A, \@B, etc,
+	rather than using hex form.
+	- Options to control memory reference formatting.
+
 1.01 Sun Dec 14 16:57:58 EST 2003
         - Added code to skip weak refs created with Scalar::Util's
           weaken(). (Sam Tregar)

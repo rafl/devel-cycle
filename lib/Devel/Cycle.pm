@@ -1,16 +1,23 @@
 package Devel::Cycle;
+# $Id: Cycle.pm,v 1.4 2004/01/12 03:04:00 lstein Exp $
 
 use 5.006001;
 use strict;
+use Carp 'croak';
 use warnings;
 
-use Scalar::Util qw(isweak);
+use Scalar::Util qw(isweak blessed);
+
+my $SHORT_NAME = 'A';
+my %SHORT_NAMES;
 
 require Exporter;
 
 our @ISA = qw(Exporter);
 our @EXPORT = qw(find_cycle);
-our $VERSION = '1.01';
+our @EXPORT_OK = qw($FORMATTING);
+our $VERSION = '1.02';
+our $FORMATTING = 'roasted';
 
 sub find_cycle {
   my $ref      = shift;
@@ -46,20 +53,22 @@ sub _find_cycle {
   }
   $seenit->{$current}++;
 
-  if (UNIVERSAL::isa($current,'SCALAR') || UNIVERSAL::isa($current,'REF')) {
+  my $type = _get_type($current);
+
+  if ($type eq 'SCALAR') {
      return if isweak($current);
     _find_cycle($$current,{%$seenit},$callback,
 		(@report,['SCALAR',undef,$current => $$current]));
   }
 
-  elsif (UNIVERSAL::isa($current,'ARRAY')) {
+  elsif ($type eq 'ARRAY') {
     for (my $i=0; $i<@$current; $i++) {
       next if isweak($current->[$i]);
       _find_cycle($current->[$i],{%$seenit},$callback,
 		  (@report,['ARRAY',$i,$current => $current->[$i]]));
     }
   }
-  elsif (UNIVERSAL::isa($current,'HASH')) {
+  elsif ($type eq 'HASH') {
     for my $key (keys %$current) {
        next if isweak($current->{$key});
       _find_cycle($current->{$key},{%$seenit},$callback,
@@ -74,17 +83,48 @@ sub _do_report {
   print "Cycle ($counter):\n";
   foreach (@$path) {
     my ($type,$index,$ref,$value) = @$_;
-    printf("\t%30s => %-30s\n",$ref,$value)               if $type eq 'SCALAR';
-    printf("\t%30s => %-30s\n","${ref}->[$index]",$value) if $type eq 'ARRAY';
-    printf("\t%30s => %-30s\n","${ref}->{$index}",$value) if $type eq 'HASH';
+    printf("\t%30s => %-30s\n",_format_reference($type,$index,$ref,0),_format_reference(undef,undef,$value,1));
   }
   print "\n";
 }
 
+sub _format_reference {
+  my ($type,$index,$ref,$deref) = @_;
+  $type ||= _get_type($ref);
+  return $ref unless $type;
+  my $suffix  = defined $index ? _format_index($type,$index) : '';
+  if ($FORMATTING eq 'raw') {
+    return $ref.$suffix;
+  }
+
+  else {
+    my $package  = blessed($ref);
+    my $prefix   = $package ? ($FORMATTING eq 'roasted' ? "${package}::" : "${package}="  ) : '';
+    my $sygil    = $deref ? '\\' : '';
+    my $shortname = ($SHORT_NAMES{$ref} ||= $SHORT_NAME++);
+    return $sygil . ($sygil ? '$' : '$$'). $prefix . $shortname . $suffix if $type eq 'SCALAR';
+    return $sygil . ($sygil ? '@' : '$') . $prefix . $shortname . $suffix  if $type eq 'ARRAY';
+    return $sygil . ($sygil ? '%' : '$') . $prefix . $shortname . $suffix  if $type eq 'HASH';
+  }
+}
+
+sub _get_type {
+  my $thingy = shift;
+  return unless ref $thingy;
+  return 'SCALAR' if UNIVERSAL::isa($thingy,'SCALAR') || UNIVERSAL::isa($thingy,'REF');
+  return 'ARRAY'  if UNIVERSAL::isa($thingy,'ARRAY');
+  return 'HASH'   if UNIVERSAL::isa($thingy,'HASH');
+}
+
+sub _format_index {
+  my ($type,$index) = @_;
+  return "->[$index]" if $type eq 'ARRAY';
+  return "->{'$index'}" if $type eq 'HASH';
+  return;
+}
+
 1;
 __END__
-
-# Below is stub documentation for your module. You'd better edit it!
 
 =head1 NAME
 
@@ -107,30 +147,31 @@ Devel::Cycle - Find memory cycles in objects
 
   # output:
 
- Cycle (1):
- 	HASH(0x8171d30)->{george} => HASH(0x8171d00)
-	HASH(0x8171d00)->{phyllis} => HASH(0x8171d30)
+Cycle (1):
+	                $A->{'george'} => \%B
+	               $B->{'phyllis'} => \%A
 
- Cycle (2):
-	HASH(0x8171d30)->{george} => HASH(0x8171d00)
-	HASH(0x8171d00)->{mary} => ARRAY(0x814be60)
-	ARRAY(0x814be60)->[3] => HASH(0x8171d00)
+Cycle (2):
+	                $A->{'george'} => \%B
+	                  $B->{'mary'} => \@A
+	                       $A->[3] => \%B
 
- Cycle (3):
-	HASH(0x8171d30)->{fred} => ARRAY(0x814be60)
-	ARRAY(0x814be60)->[3] => HASH(0x8171d00)
-	HASH(0x8171d00)->{phyllis} => HASH(0x8171d30)
+Cycle (3):
+	                  $A->{'fred'} => \@A
+	                       $A->[3] => \%B
+	               $B->{'phyllis'} => \%A
 
- Cycle (4):
-	HASH(0x8171d30)->{fred} => ARRAY(0x814be60)
-	ARRAY(0x814be60)->[3] => HASH(0x8171d00)
-	HASH(0x8171d00)->{mary} => ARRAY(0x814be60)
+Cycle (4):
+	                  $A->{'fred'} => \@A
+	                       $A->[3] => \%B
+	                  $B->{'mary'} => \@A
 
 =head1 DESCRIPTION
 
-This is a simple developer's tool for finding cycles in objects and
-other types of references.  Because of Perl's reference-count based
-memory management, cycles will cause memory leaks.
+This is a simple developer's tool for finding circular references in
+objects and other types of references.  Because of Perl's
+reference-count based memory management, circular references will
+cause memory leaks.
 
 =head2 EXPORT
 
@@ -173,6 +214,33 @@ If a reference is a weak ref produced using Scalar::Util's weaken()
 function then it won't contribute to cycles.
 
 =back
+
+The default callback prints out a trace of each cycle it finds.  You
+can control the format of the trace by setting the package variable
+$Devel::Cycle::FORMATTING to one of "raw," "cooked," or "roasted."
+
+The "raw" format prints out anonymous memory references using standard
+Perl memory location nomenclature.  For example, a "Foo::Bar" object
+that points to an ordinary hash will appear in the trace like this:
+
+	Foo::Bar=HASH(0x8124394)->{'phyllis'} => HASH(0x81b4a90)
+
+The "cooked" format (the default), uses short names for anonymous
+memory locations, beginning with "A" and moving upward with the magic
+++ operator.  This leads to a much more readable display:
+
+        $Foo::Bar=B->{'phyllis'} => \%A
+
+The "roasted" format is similar to the "cooked" format, except that
+object references are formatted slightly differently:
+
+	$Foo::Bar::B->{'phyllis'} => \%A
+
+For your convenience, $Devel::Cycle::FORMATTING can be imported:
+
+       use Devel::Cycle qw(:DEFAULT $FORMATTING);
+       $FORMATTING = 'raw';
+
 
 =head1 SEE ALSO
 
