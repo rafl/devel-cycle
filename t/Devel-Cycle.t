@@ -5,7 +5,8 @@
 
 # change 'tests => 1' to 'tests => last_test_to_print';
 
-use Test::More tests => 3;
+use Test::More tests => 5;
+use Scalar::Util qw(weaken isweak);
 BEGIN { use_ok('Devel::Cycle') };
 
 #########################
@@ -31,4 +32,13 @@ $counter = 0;
 find_cycle($test2,sub {$counter++});
 is($counter,1,'found one cycle in $test2');
 
+# now fix them with weaken and make sure that gets noticed
+$counter = 0;
+weaken($test->{george}->{phyllis});
+find_cycle($test,sub {$counter++});
+is($counter,2,'found two cycles in $test after weaken()');
 
+$counter = 0;
+weaken($test->{fred}[3]);
+find_cycle($test,sub {$counter++});
+is($counter,0,'found no cycles in $test after second weaken()');

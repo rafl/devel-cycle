@@ -1,14 +1,16 @@
 package Devel::Cycle;
 
-use 5.008000;
+use 5.006001;
 use strict;
 use warnings;
+
+use Scalar::Util qw(isweak);
 
 require Exporter;
 
 our @ISA = qw(Exporter);
 our @EXPORT = qw(find_cycle);
-our $VERSION = '1.00';
+our $VERSION = '1.01';
 
 sub find_cycle {
   my $ref      = shift;
@@ -28,27 +30,38 @@ sub _find_cycle {
   my $callback  = shift;
   my @report  = @_;
 
+  return unless ref $current;
+
+  # note: it seems like you could just do:
+  #
+  #    return if isweak($current);
+  #
+  # but strangely the weak flag doesn't seem to survive the copying,
+  # so the test has to happen directly on the reference in the data
+  # structure being scanned.
+
   if ($seenit->{$current}) {
     $callback->(\@report);
     return;
   }
-
-  return unless ref $current;
   $seenit->{$current}++;
 
   if (UNIVERSAL::isa($current,'SCALAR') || UNIVERSAL::isa($current,'REF')) {
+     return if isweak($current);
     _find_cycle($$current,{%$seenit},$callback,
 		(@report,['SCALAR',undef,$current => $$current]));
   }
 
   elsif (UNIVERSAL::isa($current,'ARRAY')) {
     for (my $i=0; $i<@$current; $i++) {
+      next if isweak($current->[$i]);
       _find_cycle($current->[$i],{%$seenit},$callback,
 		  (@report,['ARRAY',$i,$current => $current->[$i]]));
     }
   }
   elsif (UNIVERSAL::isa($current,'HASH')) {
     for my $key (keys %$current) {
+       next if isweak($current->{$key});
       _find_cycle($current->{$key},{%$seenit},$callback,
 		  (@report,['HASH',$key,$current => $current->{$key}]));
     }
@@ -156,11 +169,16 @@ The first element of the array reference is the $object_reference that
 you pased to find_cycle() and may not be directly involved in the
 cycle.
 
+If a reference is a weak ref produced using Scalar::Util's weaken()
+function then it won't contribute to cycles.
+
 =back
 
 =head1 SEE ALSO
 
 L<Devel::Leak>
+
+L<Scalar::Util>
 
 =head1 AUTHOR
 
