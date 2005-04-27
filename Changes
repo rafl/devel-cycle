@@ -1,5 +1,8 @@
 Revision history for Perl extension Devel::Cycle.
 
+1.04
+	- Added ability to detect weakened cycles courtesy Stevan Little
+
 1.03 Fri Jan 21 13:47:50 EST 2005
 	- Sort the hash keys so that the cycle path is more deterministic
 	(avoids test failures in Test::Memory::Cycle)

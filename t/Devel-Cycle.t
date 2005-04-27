@@ -5,7 +5,7 @@
 
 # change 'tests => 1' to 'tests => last_test_to_print';
 
-use Test::More tests => 5;
+use Test::More tests => 7;
 use Scalar::Util qw(weaken isweak);
 BEGIN { use_ok('Devel::Cycle') };
 
@@ -38,7 +38,22 @@ weaken($test->{george}->{phyllis});
 find_cycle($test,sub {$counter++});
 is($counter,2,'found two cycles in $test after weaken()');
 
+# uncomment this to test the printing
+# diag "Not Weak";
+# find_cycle($test);
+# diag "Weak";
+# find_weakened_cycle($test);
+
+$counter = 0;
+find_weakened_cycle($test,sub {$counter++});
+is($counter, 4, 'found four cycles (including weakened ones) in $test after weaken()');
+
 $counter = 0;
 weaken($test->{fred}[3]);
 find_cycle($test,sub {$counter++});
 is($counter,0,'found no cycles in $test after second weaken()');
+
+$counter = 0;
+find_weakened_cycle($test,sub {$counter++});
+is($counter,4,'found four cycles (including weakened ones) in $test after second weaken()');
+

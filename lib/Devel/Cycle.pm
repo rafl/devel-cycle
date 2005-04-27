@@ -1,5 +1,5 @@
 package Devel::Cycle;
-# $Id: Cycle.pm,v 1.6 2005/01/21 18:49:04 lstein Exp $
+# $Id: Cycle.pm,v 1.7 2005/01/21 23:00:23 lstein Exp $
 
 use 5.006001;
 use strict;
@@ -14,10 +14,22 @@ my %SHORT_NAMES;
 require Exporter;
 
 our @ISA = qw(Exporter);
-our @EXPORT = qw(find_cycle);
+our @EXPORT = qw(find_cycle find_weakened_cycle);
 our @EXPORT_OK = qw($FORMATTING);
-our $VERSION = '1.03';
+our $VERSION = '1.04';
 our $FORMATTING = 'roasted';
+
+sub find_weakened_cycle {
+  my $ref      = shift;
+  my $callback = shift;
+  unless ($callback) {
+    my $counter = 0;
+    $callback = sub {
+      _do_report(++$counter,shift)
+    }
+  }
+  _find_cycle($ref,{},$callback,1,());
+}
 
 sub find_cycle {
   my $ref      = shift;
@@ -28,13 +40,14 @@ sub find_cycle {
       _do_report(++$counter,shift)
     }
   }
-  _find_cycle($ref,{},$callback,());
+  _find_cycle($ref,{},$callback,0,());
 }
 
 sub _find_cycle {
   my $current   = shift;
   my $seenit    = shift;
   my $callback  = shift;
+  my $inc_weak_refs = shift;
   my @report  = @_;
 
   return unless ref $current;
@@ -56,23 +69,23 @@ sub _find_cycle {
   my $type = _get_type($current);
 
   if ($type eq 'SCALAR') {
-     return if isweak($current);
-    _find_cycle($$current,{%$seenit},$callback,
-		(@report,['SCALAR',undef,$current => $$current]));
+     return if !$inc_weak_refs && isweak($current);
+    _find_cycle($$current,{%$seenit},$callback,$inc_weak_refs,
+		(@report,['SCALAR',undef,$current => $$current,$inc_weak_refs?isweak($current):()]));
   }
 
   elsif ($type eq 'ARRAY') {
     for (my $i=0; $i<@$current; $i++) {
-      next if isweak($current->[$i]);
-      _find_cycle($current->[$i],{%$seenit},$callback,
-		  (@report,['ARRAY',$i,$current => $current->[$i]]));
+      next if !$inc_weak_refs && isweak($current->[$i]);
+      _find_cycle($current->[$i],{%$seenit},$callback,$inc_weak_refs,
+		  (@report,['ARRAY',$i,$current => $current->[$i],$inc_weak_refs?isweak($current->[$i]):()]));
     }
   }
   elsif ($type eq 'HASH') {
     for my $key (sort keys %$current) {
-       next if isweak($current->{$key});
-      _find_cycle($current->{$key},{%$seenit},$callback,
-		  (@report,['HASH',$key,$current => $current->{$key}]));
+       next if !$inc_weak_refs && isweak($current->{$key});
+      _find_cycle($current->{$key},{%$seenit},$callback,$inc_weak_refs,
+		  (@report,['HASH',$key,$current => $current->{$key},$inc_weak_refs?isweak($current->{$key}):()]));
     }
   }
 }
@@ -82,8 +95,8 @@ sub _do_report {
   my $path    = shift;
   print "Cycle ($counter):\n";
   foreach (@$path) {
-    my ($type,$index,$ref,$value) = @$_;
-    printf("\t%30s => %-30s\n",_format_reference($type,$index,$ref,0),_format_reference(undef,undef,$value,1));
+    my ($type,$index,$ref,$value,$is_weak) = @$_;
+    printf("\t%30s => %-30s\n",($is_weak ? 'w-> ' : '')._format_reference($type,$index,$ref,0),_format_reference(undef,undef,$value,1));
   }
   print "\n";
 }
@@ -147,24 +160,51 @@ Devel::Cycle - Find memory cycles in objects
 
   # output:
 
-Cycle (1):
+  Cycle (1):
 	                $A->{'george'} => \%B
 	               $B->{'phyllis'} => \%A
 
-Cycle (2):
+  Cycle (2):
 	                $A->{'george'} => \%B
 	                  $B->{'mary'} => \@A
 	                       $A->[3] => \%B
 
-Cycle (3):
+  Cycle (3):
 	                  $A->{'fred'} => \@A
 	                       $A->[3] => \%B
 	               $B->{'phyllis'} => \%A
 
-Cycle (4):
+  Cycle (4):
 	                  $A->{'fred'} => \@A
 	                       $A->[3] => \%B
 	                  $B->{'mary'} => \@A
+                      
+  
+  # you can also check weakened references                                          
+  weaken($test->{george}->{phyllis});                      
+  find_weakened_cycle($test);
+  exit 0;                      
+
+  # output:                      
+  
+  Cycle (1):
+                        $A->{'george'} => \%B                           
+                          $B->{'mary'} => \@C                           
+                               $C->[3] => \%B                           
+
+  Cycle (2):
+                        $A->{'george'} => \%B                           
+                   w-> $B->{'phyllis'} => \%A                           
+
+  Cycle (3):
+                          $A->{'fred'} => \@C                           
+                               $C->[3] => \%B                           
+                          $B->{'mary'} => \@C                           
+
+  Cycle (4):
+                          $A->{'fred'} => \@C                           
+                               $C->[3] => \%B                           
+                   w-> $B->{'phyllis'} => \%A                       
 
 =head1 DESCRIPTION
 
@@ -175,7 +215,7 @@ cause memory leaks.
 
 =head2 EXPORT
 
-The find_cycle() subroutine is exported by default.
+The find_cycle() and find_weakened_cycle() subroutine are exported by default.
 
 =over 4
 
@@ -213,6 +253,39 @@ cycle.
 If a reference is a weak ref produced using Scalar::Util's weaken()
 function then it won't contribute to cycles.
 
+=item find_weakened_cycle($object_reference,[$callback])
+
+The find_weakened_cycle() function will traverse the object reference and print
+a report to STDOUT identifying any memory cycles it finds, I<including> any weakened
+cycles produced using Scalar::Util's weaken().
+
+If an optional callback code reference is provided, then this callback
+will be invoked on each cycle that is found.  The callback will be
+passed an array reference pointing to a list of lists with the
+following format:
+
+ $arg = [ ['REFTYPE',$index,$reference,$reference_value,$is_weakened],
+          ['REFTYPE',$index,$reference,$reference_value,$is_weakened],
+          ['REFTYPE',$index,$reference,$reference_value,$is_weakened],
+           ...
+        ]
+
+Each element in the array reference describes one edge in the memory
+cycle.  'REFTYPE' describes the type of the reference and is one of
+'SCALAR','ARRAY' or 'HASH'.  $index is the index affected by the
+reference, and is undef for a scalar, an integer for an array
+reference, or a hash key for a hash.  $reference is the memory
+reference, and $reference_value is its dereferenced value. $is_weakened
+is a boolean specifying if the reference is weakened or not. For
+example, if the edge is an ARRAY, then the following relationship
+holds:
+
+   $reference->[$index] eq $reference_value
+
+The first element of the array reference is the $object_reference that
+you pased to find_cycle() and may not be directly involved in the
+cycle.
+
 =back
 
 The default callback prints out a trace of each cycle it finds.  You
@@ -241,6 +314,10 @@ For your convenience, $Devel::Cycle::FORMATTING can be imported:
        use Devel::Cycle qw(:DEFAULT $FORMATTING);
        $FORMATTING = 'raw';
 
+If a reference is a weakened ref, then it will have a 'w->' prepended to
+it, like this:
+
+	w-> $Foo::Bar::B->{'phyllis'} => \%A
 
 =head1 SEE ALSO
 
