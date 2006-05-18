@@ -1,9 +1,9 @@
 package Devel::Cycle;
-# $Id: Cycle.pm,v 1.7 2005/01/21 23:00:23 lstein Exp $
+# $Id: Cycle.pm,v 1.8 2006/05/18 18:17:27 lstein Exp $
 
 use 5.006001;
 use strict;
-use Carp 'croak';
+use Carp 'croak','carp';
 use warnings;
 
 use Scalar::Util qw(isweak blessed);
@@ -11,13 +11,37 @@ use Scalar::Util qw(isweak blessed);
 my $SHORT_NAME = 'A';
 my %SHORT_NAMES;
 
+
 require Exporter;
 
 our @ISA = qw(Exporter);
 our @EXPORT = qw(find_cycle find_weakened_cycle);
 our @EXPORT_OK = qw($FORMATTING);
-our $VERSION = '1.04';
+our $VERSION = '1.05';
 our $FORMATTING = 'roasted';
+our $QUIET   = 0;
+
+my %import_args = (-quiet =>1,
+		   -raw   =>1,
+		   -cooked =>1,
+		   -roasted=>1);
+
+BEGIN {
+  require constant;
+  constant->import( HAVE_PADWALKER => eval { require PadWalker; 1 } );
+}
+
+sub import {
+  my $self = shift;
+  my @args = @_;
+  my %args = map {$_=>1} @args;
+  $QUIET++    if exists $args{-quiet};
+  $FORMATTING = 'roasted' if exists $args{-roasted};
+  $FORMATTING = 'raw'     if exists $args{-raw};
+  $FORMATTING = 'cooked'  if exists $args{-cooked};
+  warn join ' ',grep {!exists $import_args{$_}} @_;
+  $self->export_to_level(1,grep {!exists $import_args{$_}} @_);
+}
 
 sub find_weakened_cycle {
   my $ref      = shift;
@@ -48,6 +72,7 @@ sub _find_cycle {
   my $seenit    = shift;
   my $callback  = shift;
   my $inc_weak_refs = shift;
+  my %complain;
   my @report  = @_;
 
   return unless ref $current;
@@ -88,6 +113,19 @@ sub _find_cycle {
 		  (@report,['HASH',$key,$current => $current->{$key},$inc_weak_refs?isweak($current->{$key}):()]));
     }
   }
+  elsif ($type eq 'CODE') {
+    if (HAVE_PADWALKER) {
+      my $closed_vars = PadWalker::closed_over( $current );
+      foreach my $varname ( sort keys %$closed_vars ) {
+        my $value = $closed_vars->{$varname};
+        next if !$inc_weak_refs && isweak($$value);
+        _find_cycle( $$value,{%$seenit},$callback,$inc_weak_refs,
+		     (@report,['CODE',$varname,$current => $$value,$inc_weak_refs?isweak($$value):()]));
+      }
+    } elsif (!$complain{$current}++ && !$QUIET) {
+      carp "A code closure was detected in but we cannot check it unless the PadWalker module is installed";
+    }
+  }
 }
 
 sub _do_report {
@@ -118,21 +156,25 @@ sub _format_reference {
     return $sygil . ($sygil ? '$' : '$$'). $prefix . $shortname . $suffix if $type eq 'SCALAR';
     return $sygil . ($sygil ? '@' : '$') . $prefix . $shortname . $suffix  if $type eq 'ARRAY';
     return $sygil . ($sygil ? '%' : '$') . $prefix . $shortname . $suffix  if $type eq 'HASH';
+    return $sygil . ($sygil ? '&' : '$') . $prefix . $shortname . $suffix if $type eq 'CODE';
   }
 }
 
+# why not Scalar::Util::reftype?
 sub _get_type {
   my $thingy = shift;
   return unless ref $thingy;
   return 'SCALAR' if UNIVERSAL::isa($thingy,'SCALAR') || UNIVERSAL::isa($thingy,'REF');
   return 'ARRAY'  if UNIVERSAL::isa($thingy,'ARRAY');
   return 'HASH'   if UNIVERSAL::isa($thingy,'HASH');
+  return 'CODE'   if UNIVERSAL::isa($thingy,'CODE');
 }
 
 sub _format_index {
   my ($type,$index) = @_;
   return "->[$index]" if $type eq 'ARRAY';
   return "->{'$index'}" if $type eq 'HASH';
+  return " variable $index" if $type eq 'CODE';
   return;
 }
 
@@ -178,14 +220,13 @@ Devel::Cycle - Find memory cycles in objects
 	                  $A->{'fred'} => \@A
 	                       $A->[3] => \%B
 	                  $B->{'mary'} => \@A
-                      
   
-  # you can also check weakened references                                          
-  weaken($test->{george}->{phyllis});                      
+  # you can also check weakened references
+  weaken($test->{george}->{phyllis});
   find_weakened_cycle($test);
-  exit 0;                      
+  exit 0;
 
-  # output:                      
+  # output:
   
   Cycle (1):
                         $A->{'george'} => \%B                           
@@ -288,9 +329,11 @@ cycle.
 
 =back
 
+=head2 Cycle Report Formats
+
 The default callback prints out a trace of each cycle it finds.  You
 can control the format of the trace by setting the package variable
-$Devel::Cycle::FORMATTING to one of "raw," "cooked," or "roasted."
+$Devel::Cycle::FORMATTING to one of "raw," "cooked," or "roasted".
 
 The "raw" format prints out anonymous memory references using standard
 Perl memory location nomenclature.  For example, a "Foo::Bar" object
@@ -309,20 +352,37 @@ object references are formatted slightly differently:
 
 	$Foo::Bar::B->{'phyllis'} => \%A
 
-For your convenience, $Devel::Cycle::FORMATTING can be imported:
-
-       use Devel::Cycle qw(:DEFAULT $FORMATTING);
-       $FORMATTING = 'raw';
-
 If a reference is a weakened ref, then it will have a 'w->' prepended to
 it, like this:
 
 	w-> $Foo::Bar::B->{'phyllis'} => \%A
 
+For your convenience, $Devel::Cycle::FORMATTING can be imported:
+
+       use Devel::Cycle qw(:DEFAULT $FORMATTING);
+       $FORMATTING = 'raw';
+
+Alternatively, you can control the formatting at compile time by
+passing one of the options -raw, -cooked, or -roasted to "use" as
+illustrated here:
+
+  use Devel::Cycle -raw;
+
+=head2 Code references (closures)
+
+If the PadWalker module is installed, Devel::Cycle will also report
+cycles in code closures. If PadWalker is not installed and
+Devel::Cycle detects a CODE reference in one of the data structures,
+it will warn (once per data structure) that it cannot inspect the CODE
+unless PadWalker is available. You can turn this warning off by
+passing -quiet to Devel::Cycle at compile time:
+
+ use Devel::Cycle -quiet;
+
 =head1 SEE ALSO
 
+L<Test::Memory::Cycle>
 L<Devel::Leak>
-
 L<Scalar::Util>
 
 =head1 AUTHOR
