@@ -1,6 +1,10 @@
 Revision history for Perl extension Devel::Cycle.
 
-1.05
+1.06 Tue May 23 17:08:22 EDT 2006
+	- Removed debugging warning.
+	- Only checks CODErefs if PadWalker version >= 1.0.
+
+1.05 May 18 2006
 	- Added ability to detect cycles in CODErefs courtesy Yuval Kogman.
 
 1.04

@@ -1,5 +1,5 @@
 package Devel::Cycle;
-# $Id: Cycle.pm,v 1.8 2006/05/18 18:17:27 lstein Exp $
+# $Id: Cycle.pm,v 1.9 2006/05/23 21:09:26 lstein Exp $
 
 use 5.006001;
 use strict;
@@ -17,7 +17,7 @@ require Exporter;
 our @ISA = qw(Exporter);
 our @EXPORT = qw(find_cycle find_weakened_cycle);
 our @EXPORT_OK = qw($FORMATTING);
-our $VERSION = '1.05';
+our $VERSION = '1.06';
 our $FORMATTING = 'roasted';
 our $QUIET   = 0;
 
@@ -28,7 +28,11 @@ my %import_args = (-quiet =>1,
 
 BEGIN {
   require constant;
-  constant->import( HAVE_PADWALKER => eval { require PadWalker; 1 } );
+  constant->import( HAVE_PADWALKER =>
+		    eval {
+		      require PadWalker;
+		      $PadWalker::VERSION >= 1.0;
+		    });
 }
 
 sub import {
@@ -39,7 +43,6 @@ sub import {
   $FORMATTING = 'roasted' if exists $args{-roasted};
   $FORMATTING = 'raw'     if exists $args{-raw};
   $FORMATTING = 'cooked'  if exists $args{-cooked};
-  warn join ' ',grep {!exists $import_args{$_}} @_;
   $self->export_to_level(1,grep {!exists $import_args{$_}} @_);
 }
 
