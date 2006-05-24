@@ -1,5 +1,5 @@
 package Devel::Cycle;
-# $Id: Cycle.pm,v 1.9 2006/05/23 21:09:26 lstein Exp $
+# $Id: Cycle.pm,v 1.10 2006/05/24 02:29:32 lstein Exp $
 
 use 5.006001;
 use strict;
@@ -17,7 +17,7 @@ require Exporter;
 our @ISA = qw(Exporter);
 our @EXPORT = qw(find_cycle find_weakened_cycle);
 our @EXPORT_OK = qw($FORMATTING);
-our $VERSION = '1.06';
+our $VERSION = '1.07';
 our $FORMATTING = 'roasted';
 our $QUIET   = 0;
 
@@ -43,7 +43,7 @@ sub import {
   $FORMATTING = 'roasted' if exists $args{-roasted};
   $FORMATTING = 'raw'     if exists $args{-raw};
   $FORMATTING = 'cooked'  if exists $args{-cooked};
-  $self->export_to_level(1,grep {!exists $import_args{$_}} @_);
+  $self->export_to_level(1,$self,grep {!exists $import_args{$_}} @_);
 }
 
 sub find_weakened_cycle {

@@ -1,5 +1,8 @@
 Revision history for Perl extension Devel::Cycle.
 
+1.07 Tue May 23 22:28:03 EDT 2006
+	- Fixed export_to_level() problem so that Test::Memory::Cycle works again.
+
 1.06 Tue May 23 17:08:22 EDT 2006
 	- Removed debugging warning.
 	- Only checks CODErefs if PadWalker version >= 1.0.
