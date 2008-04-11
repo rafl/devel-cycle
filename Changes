@@ -1,4 +1,7 @@
 Revision history for Perl extension Devel::Cycle.
+1.08 Fri Apr 11 17:55:59 EDT 2008
+     	- Peter Brakemeier identified and patched bug in which stringified objects could
+           create false positives. Thanks Peter!
 
 1.07 Tue May 23 22:28:03 EDT 2006
 	- Fixed export_to_level() problem so that Test::Memory::Cycle works again.

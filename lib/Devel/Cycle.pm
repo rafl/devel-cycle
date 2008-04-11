@@ -1,12 +1,12 @@
 package Devel::Cycle;
-# $Id: Cycle.pm,v 1.10 2006/05/24 02:29:32 lstein Exp $
+# $Id: Cycle.pm,v 1.11 2008/04/11 21:57:13 lstein Exp $
 
 use 5.006001;
 use strict;
 use Carp 'croak','carp';
 use warnings;
 
-use Scalar::Util qw(isweak blessed);
+use Scalar::Util qw(isweak blessed refaddr);
 
 my $SHORT_NAME = 'A';
 my %SHORT_NAMES;
@@ -17,7 +17,7 @@ require Exporter;
 our @ISA = qw(Exporter);
 our @EXPORT = qw(find_cycle find_weakened_cycle);
 our @EXPORT_OK = qw($FORMATTING);
-our $VERSION = '1.07';
+our $VERSION = '1.08';
 our $FORMATTING = 'roasted';
 our $QUIET   = 0;
 
@@ -88,11 +88,11 @@ sub _find_cycle {
   # so the test has to happen directly on the reference in the data
   # structure being scanned.
 
-  if ($seenit->{$current}) {
+  if ($seenit->{refaddr $current}) {
     $callback->(\@report);
     return;
   }
-  $seenit->{$current}++;
+  $seenit->{refaddr $current}++;
 
   my $type = _get_type($current);
 

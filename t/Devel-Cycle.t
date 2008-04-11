@@ -5,7 +5,7 @@
 
 # change 'tests => 1' to 'tests => last_test_to_print';
 
-use Test::More tests => 7;
+use Test::More tests => 8;
 use Scalar::Util qw(weaken isweak);
 BEGIN { use_ok('Devel::Cycle') };
 
@@ -57,3 +57,15 @@ $counter = 0;
 find_weakened_cycle($test,sub {$counter++});
 is($counter,4,'found four cycles (including weakened ones) in $test after second weaken()');
 
+my $a = bless {},'foo';
+my $b = bless {},'bar';
+$a->{'b'} = $b;
+$counter = 0;
+find_cycle($a,sub {$counter++});
+is($counter,0,'found no cycles in reference stringified on purpose to create a false alarm');
+
+package foo;
+use overload q("") => sub{ return 1 };  # show false alarm
+
+package bar;
+use overload q("") => sub{ return 1 };

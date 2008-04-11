@@ -1,11 +1,14 @@
-# http://module-build.sourceforge.net/META-spec.html
-#XXXXXXX This is a prototype!!!  It will change in the future!!! XXXXX#
-name:         Devel-Cycle
-version:      1.07
-version_from: lib/Devel/Cycle.pm
-installdirs:  site
-requires:
+--- #YAML:1.0
+name:                Devel-Cycle
+version:             1.08
+abstract:            Find memory cycles in objects
+license:             ~
+author:              
+    - Lincoln Stein <lstein@cshl.edu>
+generated_by:        ExtUtils::MakeMaker version 6.44
+distribution_type:   module
+requires:     
     Scalar::Util:                  0
-
-distribution_type: module
-generated_by: ExtUtils::MakeMaker version 6.17
+meta-spec:
+    url:     http://module-build.sourceforge.net/META-spec-v1.3.html
+    version: 1.3
