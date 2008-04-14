@@ -1,4 +1,7 @@
 Revision history for Perl extension Devel::Cycle.
+1.09 Mon Apr 14 12:54:56 EDT 2008
+     	 -Dave Rolsky identified and fixed bug 25360.
+
 1.08 Fri Apr 11 17:55:59 EDT 2008
      	- Peter Brakemeier identified and patched bug in which stringified objects could
            create false positives. Thanks Peter!

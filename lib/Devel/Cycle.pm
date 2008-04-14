@@ -1,5 +1,5 @@
 package Devel::Cycle;
-# $Id: Cycle.pm,v 1.11 2008/04/11 21:57:13 lstein Exp $
+# $Id: Cycle.pm,v 1.12 2008/04/14 17:01:37 lstein Exp $
 
 use 5.006001;
 use strict;
@@ -17,7 +17,7 @@ require Exporter;
 our @ISA = qw(Exporter);
 our @EXPORT = qw(find_cycle find_weakened_cycle);
 our @EXPORT_OK = qw($FORMATTING);
-our $VERSION = '1.08';
+our $VERSION = '1.09';
 our $FORMATTING = 'roasted';
 our $QUIET   = 0;
 
@@ -55,7 +55,7 @@ sub find_weakened_cycle {
       _do_report(++$counter,shift)
     }
   }
-  _find_cycle($ref,{},$callback,1,());
+  _find_cycle($ref,{},$callback,1,{},());
 }
 
 sub find_cycle {
@@ -67,7 +67,7 @@ sub find_cycle {
       _do_report(++$counter,shift)
     }
   }
-  _find_cycle($ref,{},$callback,0,());
+  _find_cycle($ref,{},$callback,0,{},());
 }
 
 sub _find_cycle {
@@ -75,7 +75,7 @@ sub _find_cycle {
   my $seenit    = shift;
   my $callback  = shift;
   my $inc_weak_refs = shift;
-  my %complain;
+  my $complain = shift;
   my @report  = @_;
 
   return unless ref $current;
@@ -94,40 +94,82 @@ sub _find_cycle {
   }
   $seenit->{refaddr $current}++;
 
-  my $type = _get_type($current);
+  _find_cycle_dispatch($current,{%$seenit},$callback,$inc_weak_refs,$complain,@report);
+}
 
-  if ($type eq 'SCALAR') {
-     return if !$inc_weak_refs && isweak($current);
-    _find_cycle($$current,{%$seenit},$callback,$inc_weak_refs,
-		(@report,['SCALAR',undef,$current => $$current,$inc_weak_refs?isweak($current):()]));
-  }
+sub _find_cycle_dispatch {
+  my $type = _get_type($_[0]);
 
-  elsif ($type eq 'ARRAY') {
-    for (my $i=0; $i<@$current; $i++) {
-      next if !$inc_weak_refs && isweak($current->[$i]);
-      _find_cycle($current->[$i],{%$seenit},$callback,$inc_weak_refs,
-		  (@report,['ARRAY',$i,$current => $current->[$i],$inc_weak_refs?isweak($current->[$i]):()]));
+  my $sub = do { no strict 'refs'; \&{"_find_cycle_$type"} };
+  die "Invalid type: $type" unless $sub;
+
+  $sub->(@_);
+}
+
+sub _find_cycle_SCALAR {
+  my $current   = shift;
+  my $seenit    = shift;
+  my $callback  = shift;
+  my $inc_weak_refs = shift;
+  my $complain  = shift;
+  my @report  = @_;
+
+  return if !$inc_weak_refs && isweak($current);
+  _find_cycle($$current,{%$seenit},$callback,$inc_weak_refs,$complain,
+              (@report,['SCALAR',undef,$current => $$current,$inc_weak_refs?isweak($current):()]));
+}
+
+sub _find_cycle_ARRAY {
+  my $current   = shift;
+  my $seenit    = shift;
+  my $callback  = shift;
+  my $inc_weak_refs = shift;
+  my $complain  = shift;
+  my @report  = @_;
+
+  for (my $i=0; $i<@$current; $i++) {
+    next if !$inc_weak_refs && isweak($current->[$i]);
+    _find_cycle($current->[$i],{%$seenit},$callback,$inc_weak_refs,$complain,
+                (@report,['ARRAY',$i,$current => $current->[$i],$inc_weak_refs?isweak($current->[$i]):()]));
     }
-  }
-  elsif ($type eq 'HASH') {
-    for my $key (sort keys %$current) {
-       next if !$inc_weak_refs && isweak($current->{$key});
-      _find_cycle($current->{$key},{%$seenit},$callback,$inc_weak_refs,
-		  (@report,['HASH',$key,$current => $current->{$key},$inc_weak_refs?isweak($current->{$key}):()]));
+}
+
+sub _find_cycle_HASH {
+  my $current   = shift;
+  my $seenit    = shift;
+  my $callback  = shift;
+  my $inc_weak_refs = shift;
+  my $complain  = shift;
+  my @report  = @_;
+
+  for my $key (sort keys %$current) {
+    next if !$inc_weak_refs && isweak($current->{$key});
+    _find_cycle($current->{$key},{%$seenit},$callback,$inc_weak_refs,$complain,
+                (@report,['HASH',$key,$current => $current->{$key},$inc_weak_refs?isweak($current->{$key}):()]));
     }
-  }
-  elsif ($type eq 'CODE') {
-    if (HAVE_PADWALKER) {
-      my $closed_vars = PadWalker::closed_over( $current );
-      foreach my $varname ( sort keys %$closed_vars ) {
-        my $value = $closed_vars->{$varname};
-        next if !$inc_weak_refs && isweak($$value);
-        _find_cycle( $$value,{%$seenit},$callback,$inc_weak_refs,
-		     (@report,['CODE',$varname,$current => $$value,$inc_weak_refs?isweak($$value):()]));
-      }
-    } elsif (!$complain{$current}++ && !$QUIET) {
+}
+
+sub _find_cycle_CODE {
+  my $current   = shift;
+  my $seenit    = shift;
+  my $callback  = shift;
+  my $inc_weak_refs = shift;
+  my $complain  = shift;
+  my @report  = @_;
+
+  unless (HAVE_PADWALKER) {
+    if (!$complain->{$current} && !$QUIET) {
       carp "A code closure was detected in but we cannot check it unless the PadWalker module is installed";
     }
+
+    return;
+  }
+
+  my $closed_vars = PadWalker::closed_over( $current );
+  foreach my $varname ( sort keys %$closed_vars ) {
+    my $value = $closed_vars->{$varname};
+    _find_cycle_dispatch($value,{%$seenit},$callback,$inc_weak_refs,$complain,
+                         (@report,['CODE',$varname,$current => $value]));
   }
 }
 
