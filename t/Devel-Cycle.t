@@ -5,7 +5,7 @@
 
 # change 'tests => 1' to 'tests => last_test_to_print';
 
-use Test::More tests => 9;
+use Test::More tests => 12;
 use Scalar::Util qw(weaken isweak);
 BEGIN { use_ok('Devel::Cycle') };
 
@@ -14,7 +14,7 @@ BEGIN { use_ok('Devel::Cycle') };
 my $test = {fred   => [qw(a b c d e)],
 	    ethel  => [qw(1 2 3 4 5)],
 	    george => {martha => 23,
-		       agnes  => 19}
+		       agnes  => 19},
 	   };
 $test->{george}{phyllis} = $test;
 $test->{fred}[3]      = $test->{george};
@@ -84,6 +84,21 @@ SKIP:
 
     find_cycle($sub,sub {$counter++});
     is($counter,3,'found three cycles in $cyclical closure');
+}
+
+{
+    *FOOBAR = *FOOBAR if 0; # cease -w
+    my $test2 = { glob => \*FOOBAR };
+
+    my @warnings;
+    local $SIG{__WARN__} = sub { push @warnings, @_ };
+    find_cycle($test2);
+    pass("No failure if encountering glob");
+    like("@warnings", qr{unhandled type.*glob}i, "Expected warning");
+
+    @warnings = ();
+    find_cycle($test2);
+    is("@warnings", "", "Warn only once");
 }
 
 package foo;

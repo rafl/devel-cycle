@@ -1,4 +1,7 @@
 Revision history for Perl extension Devel::Cycle.
+1.10 Tue Jul  8 21:27:20 EDT 2008
+     - Slaven Rezic fixed bug 35825.
+
 1.09 Mon Apr 14 12:54:56 EDT 2008
      	 -Dave Rolsky identified and fixed bug 25360.
 

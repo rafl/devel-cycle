@@ -1,6 +1,6 @@
 --- #YAML:1.0
 name:                Devel-Cycle
-version:             1.09
+version:             1.10
 abstract:            Find memory cycles in objects
 license:             ~
 author:              

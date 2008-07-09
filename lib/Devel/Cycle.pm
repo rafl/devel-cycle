@@ -1,12 +1,12 @@
 package Devel::Cycle;
-# $Id: Cycle.pm,v 1.12 2008/04/14 17:01:37 lstein Exp $
+# $Id: Cycle.pm,v 1.13 2008/07/09 01:26:45 lstein Exp $
 
 use 5.006001;
 use strict;
 use Carp 'croak','carp';
 use warnings;
 
-use Scalar::Util qw(isweak blessed refaddr);
+use Scalar::Util qw(isweak blessed refaddr reftype);
 
 my $SHORT_NAME = 'A';
 my %SHORT_NAMES;
@@ -17,7 +17,7 @@ require Exporter;
 our @ISA = qw(Exporter);
 our @EXPORT = qw(find_cycle find_weakened_cycle);
 our @EXPORT_OK = qw($FORMATTING);
-our $VERSION = '1.09';
+our $VERSION = '1.10';
 our $FORMATTING = 'roasted';
 our $QUIET   = 0;
 
@@ -100,9 +100,15 @@ sub _find_cycle {
 sub _find_cycle_dispatch {
   my $type = _get_type($_[0]);
 
+  if (!defined $type) {
+    my $ref = reftype $_[0];
+    our %already_warned;
+    if (!$already_warned{$ref}++) {
+	warn "Unhandled type: $ref";
+    }
+    return;
+  }
   my $sub = do { no strict 'refs'; \&{"_find_cycle_$type"} };
-  die "Invalid type: $type" unless $sub;
-
   $sub->(@_);
 }
 
@@ -213,6 +219,7 @@ sub _get_type {
   return 'ARRAY'  if UNIVERSAL::isa($thingy,'ARRAY');
   return 'HASH'   if UNIVERSAL::isa($thingy,'HASH');
   return 'CODE'   if UNIVERSAL::isa($thingy,'CODE');
+  undef;
 }
 
 sub _format_index {
