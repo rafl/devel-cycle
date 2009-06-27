@@ -120,9 +120,9 @@ sub _find_cycle_SCALAR {
   my $complain  = shift;
   my @report  = @_;
 
-  return if !$inc_weak_refs && isweak($current);
+  return if !$inc_weak_refs && isweak($$current);
   _find_cycle($$current,{%$seenit},$callback,$inc_weak_refs,$complain,
-              (@report,['SCALAR',undef,$current => $$current,$inc_weak_refs?isweak($current):()]));
+              (@report,['SCALAR',undef,$current => $$current,$inc_weak_refs?isweak($$current):()]));
 }
 
 sub _find_cycle_ARRAY {
