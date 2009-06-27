@@ -5,7 +5,7 @@
 
 # change 'tests => 1' to 'tests => last_test_to_print';
 
-use Test::More tests => 12;
+use Test::More tests => 13;
 use Scalar::Util qw(weaken isweak);
 BEGIN { use_ok('Devel::Cycle') };
 
@@ -66,7 +66,7 @@ is($counter,0,'found no cycles in reference stringified on purpose to create a f
 
 SKIP:
 {
-    skip 'These tests require PadWalker 1.0+', 1
+    skip 'These tests require PadWalker 1.0+', 2
         unless Devel::Cycle::HAVE_PADWALKER;
 
     $counter = 0;
@@ -80,10 +80,17 @@ SKIP:
     my @cyclical = [];
     $cyclical[0] = \@cyclical;
 
-    my $sub = sub { return \@cyclical, \%cyclical; };
+    my $foo = \@cyclical;
+    weaken($foo);
+
+    my $sub = sub { return \@cyclical, \%cyclical, $foo; };
 
     find_cycle($sub,sub {$counter++});
     is($counter,3,'found three cycles in $cyclical closure');
+
+    $counter = 0;
+    find_weakened_cycle($sub,sub {$counter++});
+    is($counter,4,'found three cycles (including weakened ones) in closure');
 }
 
 {
